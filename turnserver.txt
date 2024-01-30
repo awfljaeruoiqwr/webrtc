@@ -1,0 +1,16 @@
+realm=turn.waveai.org
+server-name=turn.waveai.com
+
+listening-ip=0.0.0.0
+external-ip=118.40.87.2/0.0.0.0
+
+fingerprint
+
+min-port=49152
+max-port=65535
+
+verbose
+
+user=waveai:waveai0729
+
+lt-cred-mech
