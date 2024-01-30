@@ -22,7 +22,10 @@ var roomName = roomInput.value;
 navigator.getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
 
 var creator = false;
+var isKeyPressed = false;
+var intervalId = null;
 
+var buttonID;
 var rtcPeerConnection;
 var userStream;
 
@@ -65,7 +68,56 @@ hideCameraBtn.addEventListener("click", function() {
     }
 });
 
-// "created" 이벤트를 수신하는 헨들러
+const keypressHandler = function(event) {
+    isKeyPressed = true;
+    switch (event.key) {
+        case 'w':
+            buttonID = 'forward';
+            data["controls"]["w"] = 1;
+            socket.emit('control', {command: 'forward'});
+            break;
+        case 's':
+            buttonID = 'Backward';
+            data["controls"]["s"] = 1;
+            socket.emit('control', {command: 'Backward'});
+            break;
+        case 'a':
+            buttonID = 'Left';
+            data["controls"]["a"] = 1;
+            socket.emit('control', {command: 'Left'});
+            break;
+        case 'd':
+            buttonID = 'Right';
+            data["controls"]["d"] = 1;
+            socket.emit('control', {command: 'Right'});
+            break;
+    }
+};
+
+const keyupHandler = function(event) {
+    isKeyPressed = false;
+        switch (event.key) {
+            case 'w':
+                buttonID = 'forward';
+                data["controls"]["w"] = 0;
+                break;
+            case 's':
+                buttonID = 'Backward';
+                data["controls"]["s"] = 0;
+                break;
+            case 'a':
+                buttonID = 'Left';
+                data["controls"]["a"] = 0;
+                break;
+            case 'd':
+                buttonID = 'Right';
+                data["controls"]["d"] = 0;
+                break;
+        }
+        socket.emit("message", data);
+}
+
+// "created" 이벤트를 송신하는 헨들러
 socket.on("created", function() {
     // 상대방이 채팅창을 생성한 경우를 나타내는 변수
     creator = true;
@@ -92,11 +144,25 @@ socket.on("created", function() {
             alert("You can't access Media");
         }
     );
+
+    // 키보드 이벤트 리스너 생성
+    document.addEventListener('keypress', keypressHandler);
+    document.addEventListener('keyup', keyupHandler);
+    
+    if (intervalId !== null) {
+        clearInterval(intervalId);
+    }
+
+    intervalId = setInterval(function() {
+        if (!isKeyPressed) {
+            socket.emit('control', {command: 'stop'});
+        }
+    }, 1000);
     // UI에 버튼을 표시하는 함수 호출
     showButtons();
 });
 
-// "joined" 이벤트를 수신하는 헨들러
+// "joined" 이벤트를 송신하는 헨들러
 socket.on("joined", function() {
     // 사용자가 채팅방에 참여한 경우를 나타내는 변수
     creator = false;
@@ -123,6 +189,7 @@ socket.on("joined", function() {
             alert("You can't access Media");
         }
     );
+    // UI에 버튼을 표시하는 함수 호출
     showButtons();
 });
 
@@ -130,7 +197,7 @@ socket.on("full", function() {
     alert("Room is fulled, You can't access!");
 });
 
-// "ready" 이벤트를 수신하는 헨들러
+// "ready" 이벤트를 송신하는 헨들러
 socket.on("ready", function() {
     // 사용자가 채팅방을 생성한 경우에만 실행
     if (creator) {
@@ -154,14 +221,14 @@ socket.on("ready", function() {
       }
 });
 
-// "candidate" 이벤트를 수신하는 헨들러
+// "candidate" 이벤트를 송신하는 헨들러
 socket.on("candidate", function(candidate) {
 
     var iceCandidate = new RTCIceCandidate(candidate);
     rtcPeerConnection.addIceCandidate(iceCandidate);
 });
 
-// "offer" 이벤트를 수신하는 헨들러
+// "offer" 이벤트를 송신하는 헨들러
 socket.on("offer", function(offer) {
 
     if (!creator) {
@@ -188,7 +255,7 @@ socket.on("offer", function(offer) {
     }
 });
 
-// "answer" 이벤트를 수신하는 헨들러
+// "answer" 이벤트를 송신하는 헨들러
 socket.on("answer", function(answer) {
     // 수신된 Answer를 RTCPeerConnection에 설정
     rtcPeerConnection.setRemoteDescription(answer);
@@ -217,12 +284,18 @@ leaveRoomBtn.addEventListener("click", function() {
         rtcPeerConnection.close();
     }
 
-    clearInterval(messageInterval);
+    // 키보드 이벤트 리스너 제거
+    document.removeEventListener('keypress', keypressHandler);
+    document.removeEventListener('keyup', keyupHandler);
 
+    if(intervalId !== null) {
+        clearInterval(intervalId);
+        intervalId = null;
+    }
     showButtons();
 });
 
-// "leave" 이벤트를 수신하는 헨들러
+// "leave" 이벤트를 송신하는 헨들러
 socket.on("leave", function() {
     // 사용자가 채팅방을 생성한 것으로 설정
     creator = true;
@@ -237,7 +310,7 @@ socket.on("leave", function() {
     // RTCPeerConnection이 존재하는 경우에만 실행
     if (rtcPeerConnection) {
         // 이벤트 핸들러 및 RTCPeerConnection을 정리
-        rtcPeerConnection.ontrack = null; // 트랙 수신 이벤트 핸들러 제거
+        rtcPeerConnection.ontrack = null; // 트랙 송신 이벤트 핸들러 제거
         rtcPeerConnection.onicecandidate = null; // ICE candidate 이벤트 핸들러 제거
         rtcPeerConnection.close();
     }
@@ -264,65 +337,6 @@ function showButtons() {
     LeftBtn.style.display = 'inline-block';
     RightBtn.style.display = 'inline-block';
 };
-
-var isKeyPressed = false;
-
-document.addEventListener('keypress', function(event) {
-    isKeyPressed = true;
-    var buttonID;
-    switch (event.key) {
-        case 'w':
-            buttonID = 'forward';
-            data["controls"]["w"] = 1;
-            socket.emit('control', {command: 'forward'});
-            break;
-        case 's':
-            buttonID = 'Backward';
-            data["controls"]["s"] = 1;
-            socket.emit('control', {command: 'Backward'});
-            break;
-        case 'a':
-            buttonID = 'Left';
-            data["controls"]["a"] = 1;
-            socket.emit('control', {command: 'Left'});
-            break;
-        case 'd':
-            buttonID = 'Right';
-            data["controls"]["d"] = 1;
-            socket.emit('control', {command: 'Right'});
-            break;
-    }
-});
-
-document.addEventListener('keyup', function(event) {
-    isKeyPressed = false;
-    switch (event.key) {
-        case 'w':
-            buttonID = 'forward';
-            data["controls"]["w"] = 0;
-            break;
-        case 's':
-            buttonID = 'Backward';
-            data["controls"]["s"] = 0;
-            break;
-        case 'a':
-            buttonID = 'Left';
-            data["controls"]["a"] = 0;
-            break;
-        case 'd':
-            buttonID = 'Right';
-            data["controls"]["d"] = 0;
-            break;
-    }
-
-    socket.emit("message", data);
-});
-
-setInterval(function() {
-    if (!isKeyPressed) {
-        socket.emit('control', {command: 'stop'});
-    }
-}, 1000);
 
 forwardBtn.addEventListener('mousedown', function() {
     data["controls"]["w"] = 1;
