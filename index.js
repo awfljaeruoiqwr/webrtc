@@ -2,16 +2,25 @@ const express = require('express');
 const app = express();
 
 const socket = require('socket.io');
+const https = require('https');
+const fs = require('fs');
+
+// HTTPS 인증키
+const options = {
+    key: fs.readFileSync('./key/_wildcard.waveai.dev+3-key.pem'),
+    cert: fs.readFileSync('./key/_wildcard.waveai.dev+3.pem'),
+};
+
 // 서버 시작
-const server = app.listen(3000, () => {
-    console.log('Server is running');
+const server = https.createServer(options, app).listen(3000, () => {
+    console.log("Server is running");
 });
 
 // HTTP요청의 body를 파싱하기 위한 모듈 선언
 const bodyParser = require('body-parser');
 const SerialPort = require('./serialport/serialport');
 const { initializeSerialPort, robotSpeedToRPMSpeed, putPNTVelCmd, goal_rpm_speed } = require('./serialport/serialport');
-// JSON 형태의 요청을 파싱하기 위해 body-parser를 Express앱에 추가
+// JSON,URL 형태의 요청을 파싱하기 위해 body-parser를 Express앱에 추가
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({extended:true}));
 
