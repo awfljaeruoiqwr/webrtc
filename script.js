@@ -14,6 +14,7 @@ var forwardBtn = document.getElementById('forward');
 var BackwardBtn = document.getElementById('Backward');
 var LeftBtn = document.getElementById('Left');
 var RightBtn = document.getElementById('Right');
+var switch_access = document.getElementById('switch-access');
 
 var hideCameraFlag = false;
 
@@ -119,12 +120,12 @@ const keyupHandler = function(event) {
 
 // "created" 이벤트를 송신하는 헨들러
 socket.on("created", function() {
-    // 상대방이 채팅창을 생성한 경우를 나타내는 변수
+    // 사용자가 채팅창을 생성한 경우를 나타내는 변수
     creator = true;
     navigator.getUserMedia(
         {
             audio:true,
-            video:{ width:1280, height:720 }
+            video:{ width:840, height:720 }
         },
         function(stream) {
             // 스트림을 userStream 변수에 저장
@@ -160,16 +161,17 @@ socket.on("created", function() {
     }, 1000);
     // UI에 버튼을 표시하는 함수 호출
     showButtons();
+    switch_access.style.display = 'flex';
 });
 
 // "joined" 이벤트를 송신하는 헨들러
 socket.on("joined", function() {
-    // 사용자가 채팅방에 참여한 경우를 나타내는 변수
+    // 상대방이 채팅방에 참여한 경우를 나타내는 변수
     creator = false;
     navigator.getUserMedia(
         {
             audio:true,
-            video:{ width:1280, height:720 }
+            video:{ width:720, height:600 }
         },
         function(stream) {
             // 스트림을 userStream 변수에 저장
@@ -189,6 +191,9 @@ socket.on("joined", function() {
             alert("You can't access Media");
         }
     );
+    // 키보드 이벤트 리스너 생성
+    document.addEventListener('keypress', keypressHandler);
+    document.addEventListener('keyup', keyupHandler);
     // UI에 버튼을 표시하는 함수 호출
     showButtons();
 });
@@ -267,6 +272,7 @@ leaveRoomBtn.addEventListener("click", function() {
     videoChatForm.style = "display:block";
     divBtnGroup.style = "display:none";
     controlButton.style = "display:none";
+    switch_access.style = "display:none";
 
     if (userVideo.srcObject) {
         userVideo.srcObject.getTracks()[0].stop();
@@ -341,32 +347,76 @@ function showButtons() {
 forwardBtn.addEventListener('mousedown', function() {
     data["controls"]["w"] = 1;
     socket.emit('control', {command: 'forward'});
+    if (intervalId !== null) {
+        clearInterval(intervalId);
+        intervalId = null;
+    }
 });
 forwardBtn.addEventListener('mouseup', function() {
     data["controls"]["w"] = 0;
     socket.emit('control', {command: 'stop'});
+    if (intervalId === null) {
+        intervalId = setInterval(function() {
+            if (!isKeyPressed) {
+                socket.emit('control', {command: 'stop'});
+            }
+        }, 1000);
+    }
 });
 BackwardBtn.addEventListener('mousedown', function() {
     data["controls"]["s"] = 1;
     socket.emit('control', {command: 'Backward'});
+    if (intervalId !== null) {
+        clearInterval(intervalId);
+        intervalId = null;
+    }
 });
 BackwardBtn.addEventListener('mouseup', function() {
     data["controls"]["s"] = 0;
     socket.emit('control', {command: 'stop'});
+    if (intervalId === null) {
+        intervalId = setInterval(function() {
+            if (!isKeyPressed) {
+                socket.emit('control', {command: 'stop'});
+            }
+        }, 1000);
+    }
 });
 LeftBtn.addEventListener('mousedown', function() {
     data["controls"]["a"] = 1;
     socket.emit('control', {command: 'Left'});
+    if (intervalId !== null) {
+        clearInterval(intervalId);
+        intervalId = null;
+    }
 });
 LeftBtn.addEventListener('mouseup', function() {
     data["controls"]["a"] = 0;
     socket.emit('control', {command: 'stop'});
+    if (intervalId === null) {
+        intervalId = setInterval(function() {
+            if (!isKeyPressed) {
+                socket.emit('control', {command: 'stop'});
+            }
+        }, 1000);
+    }
 });
 RightBtn.addEventListener('mousedown', function() {
     data["controls"]["d"] = 1;
     socket.emit('control', {command: 'Right'});
+    if (intervalId !== null) {
+        clearInterval(intervalId);
+        intervalId = null;
+    }
 });
 RightBtn.addEventListener('mouseup', function() {
     data["controls"]["d"] = 0;
     socket.emit('control', {command: 'stop'});
+    if (intervalId === null) {
+        intervalId = setInterval(function() {
+            if (!isKeyPressed) {
+                socket.emit('control', {command: 'stop'});
+            }
+        }, 1000);
+    }
 });
