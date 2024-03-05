@@ -11,6 +11,14 @@ const options = {
     cert: fs.readFileSync('./key/_wildcard.waveai.dev+3.pem'),
 };
 
+var commandData = {"controls":{"w":0, "s":0, "a":0, "d":0}};
+
+app.get('/control', function(req, res) {
+    var controlData = commandData;
+    res.setHeader('Content-Type', 'application/json')
+    res.send(controlData);
+});
+
 // 서버 시작
 const server = https.createServer(options, app).listen(3000, () => {
     console.log("Server is running");
@@ -18,13 +26,11 @@ const server = https.createServer(options, app).listen(3000, () => {
 
 // HTTP요청의 body를 파싱하기 위한 모듈 선언
 const bodyParser = require('body-parser');
-const SerialPort = require('./serialport/serialport');
-const { initializeSerialPort, robotSpeedToRPMSpeed, putPNTVelCmd, goal_rpm_speed } = require('./serialport/serialport');
 // JSON,URL 형태의 요청을 파싱하기 위해 body-parser를 Express앱에 추가
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({extended:true}));
 
-app.set('view engine', 'ejs'); 
+app.set('view engine', 'ejs');
 app.set('views', './views');
 
 app.use(express.static('public'));
@@ -32,47 +38,18 @@ app.use(express.static('public'));
 const userRoute = require('./routes/userRoute');
 app.use('/', userRoute);
 
-const mySerialPort = SerialPort.initializeSerialPort('/dev/ttyUSB0');
-
 var io = socket(server);
 // 클라이언트가 소켓에 연결되었을 때의 이벤트
 io.on("connection", function(socket) {
     console.log("User Connected: " + socket.id);
 
     // 로봇 제어 명령을 수신하는 이벤트 헨들러
-    socket.on("control", function(commandData) {
-        console.log("Received control command:", commandData);
+    socket.on("control", function(data) {
+        commandData = data.command;
 
-        let linearSpeed = 0;
-        let angularSpeed = 0;
-
-        if (commandData.command === "forward") {
-            linearSpeed = 4.0;
-            angularSpeed = 0;
-        }
-        else if (commandData.command === "Backward") {
-            linearSpeed = -4.0;
-            angularSpeed = 0;
-        }
-        else if (commandData.command === "Left") {
-            linearSpeed = 0;
-            angularSpeed = -3.0;
-        }
-        else if (commandData.command === "Right") {
-            linearSpeed = 0;
-            angularSpeed = 3.0;
-        }
-        else if (commandData.command === "Stop") {
-            linearSpeed = 0.0;
-            angularSpeed = 0.0;
-        }
-        robotSpeedToRPMSpeed(linearSpeed, angularSpeed);
-
-        putPNTVelCmd(mySerialPort, goal_rpm_speed[0], goal_rpm_speed[1]);
     });
 
-    // 채팅방에 입장하는 이벤트 헨들러
-    socket.on("join", function(roomName) {
+        var roomName = 'default-room';    
         var rooms = io.sockets.adapter.rooms;
         var room = rooms.get(roomName);
 
@@ -89,7 +66,6 @@ io.on("connection", function(socket) {
             socket.emit("full");
         }
         console.log(room);
-    });
 
     // 상대방이 준비되었음을 알리는 이벤트 헨들러
     socket.on("ready", function(roomName) {
@@ -128,4 +104,9 @@ io.on("connection", function(socket) {
         socket.broadcast.to(roomName).emit("leave");
     });
 
+    // 연결이 끊어졌을 때 전달하는 이벤트 헨들러
+    socket.on("disconnect", function() {
+        console.log("사용자 연결 끊김");
+        socket.broadcast.emit("leave", roomName);
+    })
 });
