@@ -1,9 +1,6 @@
 var socket = io();
 
-var videoChatForm = document.getElementById('video-chat-form');
 var videoChat = document.getElementById('video-chat-rooms');
-var joinBtn = document.getElementById('join');
-var roomInput = document.getElementById('roomName');
 var userVideo = document.getElementById('user-video');
 var peerVideo = document.getElementById('peer-video');
 var controlButton = document.getElementById('control-flatform-button');
@@ -15,10 +12,11 @@ var BackwardBtn = document.getElementById('Backward');
 var LeftBtn = document.getElementById('Left');
 var RightBtn = document.getElementById('Right');
 var switch_access = document.getElementById('switch-access');
+var videoSelect = document.getElementById('video-select');
 
 var hideCameraFlag = false;
 
-var roomName = roomInput.value;
+var roomName = 'default-room';
 
 navigator.getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
 
@@ -26,11 +24,33 @@ var creator = false;
 var isKeyPressed = false;
 var intervalId = null;
 
-var buttonID;
 var rtcPeerConnection;
 var userStream;
+var commandData;
 
 var data = {"address":0, "controls":{"w":0, "s":0, "d":0, "a":0}};
+
+var keysPressed = {
+    "w":0,
+    "s":0,
+    "a":0,
+    "d":0
+};
+
+navigator.mediaDevices.enumerateDevices()
+.then(function(devices) {
+  devices.forEach(function(device) {
+    if (device.kind === 'videoinput') {
+      var option = document.createElement('option');
+      option.value = device.deviceId;
+      option.text = device.label || '카메라 ' + (videoSelect.length + 1);
+      videoSelect.appendChild(option);
+    }
+  });
+})
+.catch(function(err) {
+  console.log(err.name + ": " + err.message);
+});
 
 // ICE서버를 설정하는 객체 선언
 const iceServers = {
@@ -46,17 +66,6 @@ const iceServers = {
     ]
   };
 
-joinBtn.addEventListener("click", function() {
-    // 만약 입력된 방 이름이 비어있다면, 경고창을 표시
-    if (roomInput.value == "") {
-        alert("Please enter a room name!");
-    }
-    else {
-        // 입력된 방 이름이 비어있지 않다면, 해당 방에 조인하기 위해 서버에 "join" 이벤트를 전송
-        socket.emit("join", roomName);
-    }
-});
-
 hideCameraBtn.addEventListener("click", function() {
     hideCameraFlag = !hideCameraFlag;
     if (hideCameraFlag) {
@@ -71,52 +80,20 @@ hideCameraBtn.addEventListener("click", function() {
 
 const keypressHandler = function(event) {
     isKeyPressed = true;
-    switch (event.key) {
-        case 'w':
-            buttonID = 'forward';
-            data["controls"]["w"] = 1;
-            socket.emit('control', {command: 'forward'});
-            break;
-        case 's':
-            buttonID = 'Backward';
-            data["controls"]["s"] = 1;
-            socket.emit('control', {command: 'Backward'});
-            break;
-        case 'a':
-            buttonID = 'Left';
-            data["controls"]["a"] = 1;
-            socket.emit('control', {command: 'Left'});
-            break;
-        case 'd':
-            buttonID = 'Right';
-            data["controls"]["d"] = 1;
-            socket.emit('control', {command: 'Right'});
-            break;
+    if(event.key in keysPressed) {
+        keysPressed[event.key] = 1;
+        socket.emit('control', {command: {"controls": keysPressed}});
     }
 };
 
 const keyupHandler = function(event) {
     isKeyPressed = false;
-        switch (event.key) {
-            case 'w':
-                buttonID = 'forward';
-                data["controls"]["w"] = 0;
-                break;
-            case 's':
-                buttonID = 'Backward';
-                data["controls"]["s"] = 0;
-                break;
-            case 'a':
-                buttonID = 'Left';
-                data["controls"]["a"] = 0;
-                break;
-            case 'd':
-                buttonID = 'Right';
-                data["controls"]["d"] = 0;
-                break;
-        }
-        socket.emit("message", data);
-}
+    if(event.key in keysPressed) {
+        keysPressed[event.key] = 0;
+        socket.emit('control', {command: {"controls": keysPressed}});
+    }
+};
+socket.emit('create', 'default-room');
 
 // "created" 이벤트를 송신하는 헨들러
 socket.on("created", function() {
@@ -131,7 +108,6 @@ socket.on("created", function() {
             // 스트림을 userStream 변수에 저장
             userStream = stream;
             // 화상 채팅 UI를 업데이트
-            videoChatForm.style = "display:none";
             divBtnGroup.style = "display:flex";
             userVideo.srcObject = stream;
             userVideo.onloadedmetadata = function(e) {
@@ -149,16 +125,7 @@ socket.on("created", function() {
     // 키보드 이벤트 리스너 생성
     document.addEventListener('keypress', keypressHandler);
     document.addEventListener('keyup', keyupHandler);
-    
-    if (intervalId !== null) {
-        clearInterval(intervalId);
-    }
 
-    intervalId = setInterval(function() {
-        if (!isKeyPressed) {
-            socket.emit('control', {command: 'stop'});
-        }
-    }, 1000);
     // UI에 버튼을 표시하는 함수 호출
     showButtons();
     switch_access.style.display = 'flex';
@@ -171,7 +138,7 @@ socket.on("joined", function() {
     navigator.getUserMedia(
         {
             audio:true,
-            video:{ width:720, height:600 }
+            video:{ width:840, height:720 }
         },
         function(stream) {
             // 스트림을 userStream 변수에 저장
@@ -179,7 +146,6 @@ socket.on("joined", function() {
             // 사용자의 비디오 요소에 스트림을 설정
             userVideo.srcObject = stream;
             // 화상 채팅 UI를 업데이트
-            videoChatForm.style = "display:none";
             divBtnGroup.style = "display:flex";
             userVideo.onloadedmetadata = function(e) {
                 userVideo.play();
@@ -266,41 +232,6 @@ socket.on("answer", function(answer) {
     rtcPeerConnection.setRemoteDescription(answer);
 });
 
-leaveRoomBtn.addEventListener("click", function() {
-    socket.emit("leave", roomName);
-
-    videoChatForm.style = "display:block";
-    divBtnGroup.style = "display:none";
-    controlButton.style = "display:none";
-    switch_access.style = "display:none";
-
-    if (userVideo.srcObject) {
-        userVideo.srcObject.getTracks()[0].stop();
-        userVideo.srcObject.getTracks()[1].stop();
-    }
-
-    if (peerVideo.srcObject) {
-        peerVideo.srcObject.getTracks()[0].stop();
-        peerVideo.srcObject.getTracks()[1].stop();
-    }
-
-    if(rtcPeerConnection) {
-        rtcPeerConnection.ontrack = null;
-        rtcPeerConnection.onicecandidate = null;
-        rtcPeerConnection.close();
-    }
-
-    // 키보드 이벤트 리스너 제거
-    document.removeEventListener('keypress', keypressHandler);
-    document.removeEventListener('keyup', keyupHandler);
-
-    if(intervalId !== null) {
-        clearInterval(intervalId);
-        intervalId = null;
-    }
-    showButtons();
-});
-
 // "leave" 이벤트를 송신하는 헨들러
 socket.on("leave", function() {
     // 사용자가 채팅방을 생성한 것으로 설정
@@ -319,6 +250,39 @@ socket.on("leave", function() {
         rtcPeerConnection.ontrack = null; // 트랙 송신 이벤트 핸들러 제거
         rtcPeerConnection.onicecandidate = null; // ICE candidate 이벤트 핸들러 제거
         rtcPeerConnection.close();
+    }
+});
+
+socket.on("disconnect", function() {
+    // 이더넷 연결이 끊어졌을 때 실행할 코드
+    alert("연결이 끊겼습니다. 다시 연결해 주세요!");
+    // peerVideo 화면 검은색으로 바꾸기
+    peerVideo.style.display = "none";
+  
+    // 비디오 재생 중지
+    if (peerVideo.srcObject) {
+      peerVideo.srcObject.getTracks()[0].stop();
+      peerVideo.srcObject.getTracks()[1].stop();
+    }
+  
+    // RTCPeerConnection 정리
+    if (rtcPeerConnection) {
+      rtcPeerConnection.ontrack = null;
+      rtcPeerConnection.onicecandidate = null;
+      rtcPeerConnection.close();
+    }
+  
+    // 페이지 새로고침
+    location.reload();
+});
+
+leaveRoomBtn.addEventListener("click", function() {
+    // 확인 메시지 표시
+    if (confirm("정말 퇴장하시겠습니까?")) {
+        // 웹소켓 서버에 "leave" 이벤트 전송
+        socket.emit("leave", roomName);
+        // 현재 페이지를 닫음
+        Window.opener.close();
     }
 });
 
@@ -345,78 +309,77 @@ function showButtons() {
 };
 
 forwardBtn.addEventListener('mousedown', function() {
-    data["controls"]["w"] = 1;
-    socket.emit('control', {command: 'forward'});
-    if (intervalId !== null) {
-        clearInterval(intervalId);
-        intervalId = null;
+    commandData = {"controls":{"w":1, "s":0, "a":0, "d":0}};
+    socket.emit('control', {command: commandData});
+    if(intervalId === null) {
+        intervalId = setInterval(function() {
+            if(!isKeyPressed) {
+                socket.emit('control', {command: commandData});
+            }
+        }, 1000);
     }
 });
+
 forwardBtn.addEventListener('mouseup', function() {
-    data["controls"]["w"] = 0;
-    socket.emit('control', {command: 'stop'});
-    if (intervalId === null) {
-        intervalId = setInterval(function() {
-            if (!isKeyPressed) {
-                socket.emit('control', {command: 'stop'});
-            }
-        }, 1000);
-    }
+    commandData = {"controls":{"w":0, "s":0, "a":0, "d":0}};
+    socket.emit('control', {command: commandData});
+    clearInterval(intervalId);
+    intervalId = null;
 });
+
 BackwardBtn.addEventListener('mousedown', function() {
-    data["controls"]["s"] = 1;
-    socket.emit('control', {command: 'Backward'});
-    if (intervalId !== null) {
-        clearInterval(intervalId);
-        intervalId = null;
+    commandData = {"controls":{"w":0, "s":1, "a":0, "d":0}};
+    socket.emit('control', {command: commandData});
+    if(intervalId === null) {
+        intervalId = setInterval(function() {
+            if(!isKeyPressed) {
+                socket.emit('control', {command: commandData});
+            }
+        }, 1000);
     }
 });
+
 BackwardBtn.addEventListener('mouseup', function() {
-    data["controls"]["s"] = 0;
-    socket.emit('control', {command: 'stop'});
-    if (intervalId === null) {
-        intervalId = setInterval(function() {
-            if (!isKeyPressed) {
-                socket.emit('control', {command: 'stop'});
-            }
-        }, 1000);
-    }
+    commandData = {"controls":{"w":0, "s":0, "a":0, "d":0}};
+    socket.emit('control', {command: commandData});
+    clearInterval(intervalId);
+    intervalId = null;
 });
+
 LeftBtn.addEventListener('mousedown', function() {
-    data["controls"]["a"] = 1;
-    socket.emit('control', {command: 'Left'});
-    if (intervalId !== null) {
-        clearInterval(intervalId);
-        intervalId = null;
+    commandData = {"controls":{"w":0, "s":0, "a":1, "d":0}};
+    socket.emit('control', {command: commandData});
+    if(intervalId === null) {
+        intervalId = setInterval(function() {
+            if(!isKeyPressed) {
+                socket.emit('control', {command: commandData});
+            }
+        }, 1000);
     }
 });
+
 LeftBtn.addEventListener('mouseup', function() {
-    data["controls"]["a"] = 0;
-    socket.emit('control', {command: 'stop'});
-    if (intervalId === null) {
-        intervalId = setInterval(function() {
-            if (!isKeyPressed) {
-                socket.emit('control', {command: 'stop'});
-            }
-        }, 1000);
-    }
+    commandData = {"controls":{"w":0, "s":0, "a":0, "d":0}};
+    socket.emit('control', {command: commandData});
+    clearInterval(intervalId);
+    intervalId = null;
 });
+
 RightBtn.addEventListener('mousedown', function() {
-    data["controls"]["d"] = 1;
-    socket.emit('control', {command: 'Right'});
-    if (intervalId !== null) {
-        clearInterval(intervalId);
-        intervalId = null;
-    }
-});
-RightBtn.addEventListener('mouseup', function() {
-    data["controls"]["d"] = 0;
-    socket.emit('control', {command: 'stop'});
-    if (intervalId === null) {
+    commandData = {"controls":{"w":0, "s":0, "a":0, "d":1}};
+    socket.emit('control', {command: commandData});
+    if(intervalId === null) {
         intervalId = setInterval(function() {
-            if (!isKeyPressed) {
-                socket.emit('control', {command: 'stop'});
+            if(!isKeyPressed) {
+                socket.emit('control', {command: commandData});
             }
         }, 1000);
     }
+});
+
+RightBtn.addEventListener('mouseup', function() {
+    commandData = {"controls":{"w":0, "s":0, "a":0, "d":0}};
+    socket.emit('control', {command: commandData});
+    clearInterval(intervalId);
+    intervalId = null;
 });
